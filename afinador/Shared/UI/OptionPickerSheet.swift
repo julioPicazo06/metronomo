@@ -1,7 +1,7 @@
 import SwiftUI
 
 // MARK: - OptionPickerSheet (Shared UI)
-// Generic single-select sheet for A4, cents threshold, default instrument.
+// Generic single-select sheet for A4, cents threshold, instrument, metronome sound.
 // Debug: Value: Equatable so the checkmark matches the current store value.
 
 struct OptionPickerSheet<Value: Equatable>: View {

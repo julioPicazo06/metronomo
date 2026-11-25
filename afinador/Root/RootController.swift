@@ -58,3 +58,7 @@ struct RootController: View {
         UITabBar.appearance().scrollEdgeAppearance = appearance
     }
 }
+
+#Preview {
+    RootController()
+}

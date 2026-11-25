@@ -8,6 +8,10 @@ import Observation
 
 @Observable
 final class TunerModelView {
+    /// Silence window before returning to idle. Sleep and eligibility check share this value.
+    static let idleResetInterval: TimeInterval = 0.85
+    static var idleResetNanoseconds: UInt64 { UInt64(idleResetInterval * 1_000_000_000) }
+
     private let detector: PitchDetecting
     private let permission: MicrophonePermitting
     private let opener: SystemOpening
@@ -20,7 +24,12 @@ final class TunerModelView {
     var lockedStringIndex: Int?
     var status: TunerStatus = .idle
     var reading: TuningReading?
-    var showsTuningSheet = false
+    var sheets = Sheets()
+
+    struct Sheets {
+        var tuning = false
+        var instrument = false
+    }
 
     private var lastSignalDate: Date?
     private var lastInTune = false
@@ -71,15 +80,15 @@ final class TunerModelView {
         self.opener = opener
         self.haptics = haptics
         self.settings = settings
-        self.instrument = settings.lastInstrument
-        self.preset = settings.lastInstrument.defaultPreset
+        self.instrument = settings.defaultInstrument
+        self.preset = settings.defaultInstrument.defaultPreset
         self.detector.onFrequency = { [weak self] frequency in
             self?.ingest(frequency)
         }
     }
 
     func appear() {
-        instrument = settings.lastInstrument
+        instrument = settings.defaultInstrument
         if preset.id.hasPrefix(instrument.rawValue) == false {
             preset = instrument.defaultPreset
         }
@@ -94,11 +103,11 @@ final class TunerModelView {
     }
 
     func selectInstrument(_ kind: InstrumentKind) {
+        sheets.instrument = false
         if instrument == kind { return }
         instrument = kind
         preset = kind.defaultPreset
         lockedStringIndex = nil
-        settings.lastInstrument = kind
         settings.defaultInstrument = kind
         reading = nil
         if status != .noMicrophone && status != .unavailable {
@@ -109,7 +118,7 @@ final class TunerModelView {
     func selectPreset(_ preset: TuningPreset) {
         self.preset = preset
         lockedStringIndex = nil
-        showsTuningSheet = false
+        sheets.tuning = false
     }
 
     func selectMode(_ mode: TunerMode) {
@@ -122,8 +131,7 @@ final class TunerModelView {
                     mode: .chromatic,
                     strings: strings,
                     lockedStringIndex: nil,
-                    a4: a4,
-                    threshold: threshold
+                    a4: a4
                 )
             }
         }
@@ -141,8 +149,8 @@ final class TunerModelView {
     }
 
     // MARK: Pitch ingest
-    // Called from PitchDetector.onFrequency (main actor). After ~0.85s silence, status returns to idle
-    // but the rest note stays visible.
+    // Called from PitchDetector.onFrequency (main actor). After idleResetInterval of silence,
+    // status returns to idle but the rest note stays visible.
 
     func ingest(_ frequency: Double) {
         guard status != .noMicrophone, status != .unavailable else { return }
@@ -152,14 +160,11 @@ final class TunerModelView {
             mode: mode,
             strings: strings,
             lockedStringIndex: lockedStringIndex,
-            a4: a4,
-            threshold: threshold
+            a4: a4
         )
         reading = next
         let nextStatus = next.status(threshold: threshold)
-        status = nextStatus == .inTune ? .inTune : .listening
-        if nextStatus == .sharp { status = .sharp }
-        if nextStatus == .flat { status = .flat }
+        status = nextStatus
 
         if nextStatus == .inTune, lastInTune == false, settings.hapticsEnabled {
             haptics.playInTune()
@@ -171,9 +176,9 @@ final class TunerModelView {
     private func scheduleIdleReset() {
         idleTask?.cancel()
         idleTask = Task {
-            try? await Task.sleep(nanoseconds: 900_000_000)
+            try? await Task.sleep(nanoseconds: Self.idleResetNanoseconds)
             guard !Task.isCancelled else { return }
-            if let lastSignalDate, Date().timeIntervalSince(lastSignalDate) >= 0.85 {
+            if let lastSignalDate, Date().timeIntervalSince(lastSignalDate) >= Self.idleResetInterval {
                 reading = nil
                 lastInTune = false
                 if status != .noMicrophone && status != .unavailable {

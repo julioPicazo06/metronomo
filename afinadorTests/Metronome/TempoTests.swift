@@ -45,13 +45,31 @@ struct MetronomeModelViewTests {
 
     @Test func tapTempoUpdatesBPM() {
         let modelView = MetronomeModelView(player: FakeClickPlayer(), haptics: FakeHaptics(), settings: makeStore())
-        modelView.tap()
-        Thread.sleep(forTimeInterval: 0.5)
-        modelView.tap()
-        Thread.sleep(forTimeInterval: 0.5)
-        modelView.tap()
-        #expect((100...140).contains(modelView.bpm))
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        modelView.tap(now: t0)
+        modelView.tap(now: t0.addingTimeInterval(0.5))
+        modelView.tap(now: t0.addingTimeInterval(1.0))
+        #expect(modelView.bpm == 120)
         #expect(modelView.isTapping)
+    }
+
+    @Test func tapGapResetStartsNewEstimate() {
+        let modelView = MetronomeModelView(player: FakeClickPlayer(), haptics: FakeHaptics(), settings: makeStore())
+        let t0 = Date(timeIntervalSince1970: 2_000)
+        modelView.tap(now: t0)
+        modelView.tap(now: t0.addingTimeInterval(0.5))
+        #expect(modelView.bpm == 120)
+        // Gap > reset interval clears buffer; single new tap alone cannot change BPM.
+        modelView.tap(now: t0.addingTimeInterval(0.5 + MetronomeModelView.tapGapResetInterval + 0.1))
+        #expect(modelView.bpm == 120)
+        modelView.tap(now: t0.addingTimeInterval(0.5 + MetronomeModelView.tapGapResetInterval + 0.1 + 0.4))
+        #expect(modelView.bpm == 150)
+    }
+
+    @Test func tapTempoUsesNamedIntervals() {
+        #expect(MetronomeModelView.tapGapResetInterval == 2)
+        #expect(MetronomeModelView.tapIndicatorClearInterval == 1.2)
+        #expect(MetronomeModelView.tapIndicatorClearNanoseconds == 1_200_000_000)
     }
 }
 
@@ -68,6 +86,49 @@ struct AppSettingsStoreTests {
         #expect(reloaded.a4Frequency == 432)
         #expect(reloaded.inTuneThreshold == 3)
         #expect(reloaded.metronomeSound == .wood)
+    }
+
+    @Test func persistsSingleInstrumentPreference() {
+        let suite = "tests.settings.instrument.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        let store = AppSettingsStore(defaults: defaults)
+        store.defaultInstrument = .bass5
+
+        let reloaded = AppSettingsStore(defaults: defaults)
+        #expect(reloaded.defaultInstrument == .bass5)
+    }
+
+    @Test func migratesLegacyInstrumentKey() {
+        let suite = "tests.settings.legacyInstrument.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.set("bass", forKey: "afinador.settings.instrument")
+
+        let store = AppSettingsStore(defaults: defaults)
+        #expect(store.defaultInstrument == .bass4)
+    }
+
+    @Test func rejectsInvalidA4AndThresholdOnLoad() {
+        let suite = "tests.settings.sanitize.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.set(415.0, forKey: "afinador.settings.a4")
+        defaults.set(7.0, forKey: "afinador.settings.threshold")
+
+        let store = AppSettingsStore(defaults: defaults)
+        #expect(store.a4Frequency == 440)
+        #expect(store.inTuneThreshold == 5)
+    }
+
+    @Test func settersSanitizeA4AndThreshold() {
+        let suite = "tests.settings.sanitizeSet.\(UUID().uuidString)"
+        let store = AppSettingsStore(defaults: UserDefaults(suiteName: suite)!)
+        store.a4Frequency = 400
+        store.inTuneThreshold = 99
+        #expect(store.a4Frequency == 440)
+        #expect(store.inTuneThreshold == 5)
+        store.a4Frequency = 442
+        store.inTuneThreshold = 3
+        #expect(store.a4Frequency == 442)
+        #expect(store.inTuneThreshold == 3)
     }
 }
 

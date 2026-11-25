@@ -75,10 +75,89 @@ struct TunerModelViewTests {
 
     @Test func switchingInstrumentChangesStringCount() {
         let (modelView, _, _) = makeModelView()
+        modelView.selectInstrument(.bass4)
+        #expect(modelView.strings.count == 4)
+        #expect(modelView.instrument == .bass4)
+        modelView.selectInstrument(.bass5)
+        #expect(modelView.strings.count == 5)
+        #expect(modelView.instrument == .bass5)
         modelView.selectInstrument(.violin)
         #expect(modelView.strings.count == 4)
         #expect(modelView.instrument == .violin)
         modelView.selectInstrument(.ukulele)
         #expect(modelView.strings.count == 4)
+    }
+
+    @Test func selectInstrumentPersistsOnlyDefaultInstrument() {
+        let store = makeStore()
+        let (modelView, _, _) = makeModelView(settings: store)
+        modelView.selectInstrument(.ukulele)
+        #expect(store.defaultInstrument == .ukulele)
+        #expect(modelView.instrument == .ukulele)
+    }
+
+    @Test func appearReadsDefaultInstrument() {
+        let store = makeStore()
+        store.defaultInstrument = .violin
+        let (modelView, _, _) = makeModelView(settings: store)
+        modelView.appear()
+        #expect(modelView.instrument == .violin)
+        #expect(modelView.strings.count == 4)
+    }
+
+    @Test func ingestingSharpSetsSharpStatus() {
+        let (modelView, detector, _) = makeModelView()
+        modelView.selectMode(.chromatic)
+        detector.emit(445)
+        #expect(modelView.status == .sharp)
+    }
+
+    @Test func ingestingFlatSetsFlatStatus() {
+        let (modelView, detector, _) = makeModelView()
+        modelView.selectMode(.chromatic)
+        detector.emit(435)
+        #expect(modelView.status == .flat)
+    }
+
+    @Test func hapticFiresOnlyOnTransitionToInTune() {
+        let haptics = FakeHaptics()
+        let (modelView, detector, _) = makeModelView(haptics: haptics)
+        modelView.selectMode(.chromatic)
+        detector.emit(440)
+        #expect(haptics.inTuneCount == 1)
+        detector.emit(440)
+        #expect(haptics.inTuneCount == 1)
+        detector.emit(445)
+        detector.emit(440)
+        #expect(haptics.inTuneCount == 2)
+    }
+
+    @Test func hapticSkippedWhenDisabled() {
+        let store = makeStore()
+        store.hapticsEnabled = false
+        let haptics = FakeHaptics()
+        let (modelView, detector, _) = makeModelView(haptics: haptics, settings: store)
+        modelView.selectMode(.chromatic)
+        detector.emit(440)
+        #expect(modelView.status == .inTune)
+        #expect(haptics.inTuneCount == 0)
+    }
+
+    @Test func returnsToIdleAfterSilence() async {
+        let (modelView, detector, _) = makeModelView()
+        modelView.selectMode(.chromatic)
+        detector.emit(440)
+        #expect(modelView.status == .inTune)
+        #expect(modelView.hasSignal)
+        let waitNanos = TunerModelView.idleResetNanoseconds + 150_000_000
+        try? await Task.sleep(nanoseconds: waitNanos)
+        #expect(modelView.status == .idle)
+        #expect(modelView.reading == nil)
+        #expect(modelView.hasSignal == false)
+    }
+
+    @Test func idleResetUsesSingleInterval() {
+        #expect(TunerModelView.idleResetInterval == 0.85)
+        #expect(TunerModelView.idleResetNanoseconds == 850_000_000)
     }
 }

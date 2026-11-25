@@ -1,7 +1,7 @@
 import SwiftUI
 
 // MARK: - TunerView (View canvas)
-// Composes chips + named children. No AVAudioEngine — TunerModelView owns state.
+// Composes selectors + named children. No AVAudioEngine — TunerModelView owns state.
 // Debug: needle stuck → ingest() in TunerModelView. Note gone → hasSignal / idle reset.
 
 struct TunerView: View {
@@ -10,7 +10,7 @@ struct TunerView: View {
     var body: some View {
         VStack(spacing: 16) {
             header
-            instrumentRow
+            instrumentButton
             presetButton
             modeRow
             TunerGaugeView(
@@ -40,8 +40,20 @@ struct TunerView: View {
         .padding(.bottom, 12)
         .background(AppTheme.canvas.ignoresSafeArea())
         .sheet(isPresented: Binding(
-            get: { modelView.showsTuningSheet },
-            set: { modelView.showsTuningSheet = $0 }
+            get: { modelView.sheets.instrument },
+            set: { modelView.sheets.instrument = $0 }
+        )) {
+            OptionPickerSheet(
+                title: TunerCopy.Instrument.sheetTitle,
+                options: InstrumentKind.allCases.map { ($0.title, $0) },
+                selected: modelView.instrument,
+                onSelect: modelView.selectInstrument
+            )
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: Binding(
+            get: { modelView.sheets.tuning },
+            set: { modelView.sheets.tuning = $0 }
         )) {
             TuningPresetSheet(modelView: modelView)
                 .presentationDetents([.medium])
@@ -49,8 +61,8 @@ struct TunerView: View {
         }
     }
 
-    // MARK: Header + chips
-    // Instrument / preset / mode stay here: small composition, not their own product names.
+    // MARK: Header + selectors
+    // Instrument / preset open sheets; mode is a full-width tab so chips don't clutter the top.
 
     private var header: some View {
         HStack {
@@ -61,22 +73,38 @@ struct TunerView: View {
         }
     }
 
-    private var instrumentRow: some View {
-        HStack(spacing: 10) {
-            ForEach(InstrumentKind.allCases, id: \.self) { kind in
-                ChipButton(
-                    title: kind.title,
-                    isSelected: modelView.instrument == kind
-                ) {
-                    modelView.selectInstrument(kind)
+    private var instrumentButton: some View {
+        HStack {
+            Button {
+                modelView.sheets.instrument = true
+            } label: {
+                HStack(spacing: 8) {
+                    Text(modelView.instrument.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.successAlt)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.success)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(AppTheme.success.opacity(0.18))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(AppTheme.success, lineWidth: 1)
+                )
             }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
         }
     }
 
     private var presetButton: some View {
         Button {
-            modelView.showsTuningSheet = true
+            modelView.sheets.tuning = true
         } label: {
             HStack(spacing: 4) {
                 Text(modelView.preset.name)
@@ -91,16 +119,27 @@ struct TunerView: View {
     }
 
     private var modeRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 0) {
             ForEach(TunerMode.allCases, id: \.self) { mode in
                 ChipButton(
                     title: mode.title,
-                    isSelected: modelView.mode == mode
+                    isSelected: modelView.mode == mode,
+                    layout: .segment,
+                    unselectedFill: .clear,
+                    unselectedStroke: .clear
                 ) {
                     modelView.selectMode(mode)
                 }
             }
-            Spacer()
         }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(AppTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppTheme.border.opacity(0.35), lineWidth: 1)
+        )
     }
 }

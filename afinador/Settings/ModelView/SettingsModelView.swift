@@ -2,15 +2,19 @@ import Foundation
 import Observation
 
 // MARK: - SettingsModelView (ModelView)
-// Sheet flags + writes into AppSettingsStore. No local copy of settings.
+// Sheet flags grouped in `sheets`; writes go into AppSettingsStore.
 
 @Observable
 final class SettingsModelView {
     let store: AppSettingsStore
-    var showsA4Sheet = false
-    var showsThresholdSheet = false
-    var showsInstrumentSheet = false
-    var showsSoundSheet = false
+    var sheets = Sheets()
+
+    struct Sheets {
+        var a4 = false
+        var threshold = false
+        var instrument = false
+        var sound = false
+    }
 
     var versionText: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? SettingsCopy.Version.fallback
@@ -23,22 +27,21 @@ final class SettingsModelView {
 
     func selectA4(_ value: Double) {
         store.a4Frequency = value
-        showsA4Sheet = false
+        sheets.a4 = false
     }
 
     func selectThreshold(_ value: Double) {
         store.inTuneThreshold = value
-        showsThresholdSheet = false
+        sheets.threshold = false
     }
 
     func selectInstrument(_ kind: InstrumentKind) {
         store.defaultInstrument = kind
-        store.lastInstrument = kind
-        showsInstrumentSheet = false
+        sheets.instrument = false
     }
 
     func selectSound(_ sound: ClickSound) {
         store.metronomeSound = sound
-        showsSoundSheet = false
+        sheets.sound = false
     }
 }

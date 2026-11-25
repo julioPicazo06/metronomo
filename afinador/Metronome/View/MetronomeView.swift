@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - MetronomeView (View canvas)
 // Composes named children. Does not own ClickPlayer — MetronomeModelView + Controller do.
-// Debug: speaker → SoundPickerSheet. Play lives in MetronomeControlsRow.
+// Debug: speaker → OptionPickerSheet. Play lives in MetronomeControlsRow.
 
 struct MetronomeView: View {
     let modelView: MetronomeModelView
@@ -21,19 +21,21 @@ struct MetronomeView: View {
         .padding(.top, 8)
         .background(AppTheme.canvas.ignoresSafeArea())
         .sheet(isPresented: Binding(
-            get: { modelView.showsSoundSheet },
-            set: { modelView.showsSoundSheet = $0 }
+            get: { modelView.sheets.sound },
+            set: { modelView.sheets.sound = $0 }
         )) {
-            SoundPickerSheet(selected: modelView.sound) { sound in
-                modelView.selectSound(sound)
-            }
-            .presentationDetents([.medium])
+            OptionPickerSheet(
+                title: MetronomeCopy.Screen.soundSheetTitle,
+                options: ClickSound.allCases.map { ($0.title, $0) },
+                selected: modelView.sound,
+                onSelect: modelView.selectSound
+            )
             .presentationDragIndicator(.visible)
         }
     }
 
     // MARK: Header
-    // Title + speaker (opens shared SoundPickerSheet).
+    // Title + speaker (opens shared OptionPickerSheet).
 
     private var header: some View {
         HStack {
@@ -42,7 +44,7 @@ struct MetronomeView: View {
                 .foregroundStyle(.white)
             Spacer()
             Button {
-                modelView.showsSoundSheet = true
+                modelView.sheets.sound = true
             } label: {
                 Image(systemName: "speaker.wave.2")
                     .font(.title3)

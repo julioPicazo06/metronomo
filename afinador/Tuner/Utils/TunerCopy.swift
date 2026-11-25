@@ -11,7 +11,6 @@ enum TunerCopy {
 
     enum Status {
         static let idle = "Toca una cuerda"
-        static let listening = "Escuchando..."
         static let inTune = "Afinada"
         static let sharp = "Un poco alta"
         static let flat = "Un poco baja"
@@ -35,6 +34,7 @@ enum TunerCopy {
         static let dropD = "Drop D"
         static let openG = "Open G"
         static let openD = "Open D"
+        static let dropA = "Drop A"
         static let ukuleleC = "C"
         static let ukuleleD = "D"
         static let baritone = "Barítono"
@@ -49,13 +49,18 @@ enum TunerCopy {
     }
 
     enum Instrument {
+        static let sheetTitle = "Instrumento"
         static let guitar = "Guitarra"
+        static let bass4 = "Bajo 4 cuerdas"
+        static let bass5 = "Bajo 5 cuerdas"
         static let violin = "Violín"
         static let ukulele = "Ukelele"
 
         static func title(for kind: InstrumentKind) -> String {
             switch kind {
             case .guitar: guitar
+            case .bass4: bass4
+            case .bass5: bass5
             case .violin: violin
             case .ukulele: ukulele
             }

@@ -1,9 +1,8 @@
 import AVFoundation
 import Foundation
-import UIKit
 
 // MARK: - ClickPlayer
-// Main-actor façade over ClickEngine (detached scheduling loop + AVAudioPlayerNode).
+// Main-actor façade over ClickEngine (locked mutable state + AVAudioPlayerNode).
 
 final class ClickPlayer: ClickPlaying {
     private let engine = ClickEngine()
@@ -39,10 +38,14 @@ final class ClickPlayer: ClickPlaying {
 
 // MARK: - ClickEngine
 // Sleeps 60/bpm/clicksPerBeat between clicks. Downbeat (beat 1, click 0) is louder / higher Hz.
+// Mutable scheduling state is guarded by `lock` so start/update/stop and the detached loop share one writer protocol.
 
 private final class ClickEngine: @unchecked Sendable {
     private let audioEngine = AVAudioEngine()
     private let node = AVAudioPlayerNode()
+    private let lock = NSLock()
+    private let format: AVAudioFormat?
+
     private var isRunning = false
     private var schedulerTask: Task<Void, Never>?
     private var beat = 1
@@ -55,8 +58,11 @@ private final class ClickEngine: @unchecked Sendable {
 
     init() {
         audioEngine.attach(node)
-        let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)!
-        audioEngine.connect(node, to: audioEngine.mainMixerNode, format: format)
+        let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1)
+        self.format = format
+        if let format {
+            audioEngine.connect(node, to: audioEngine.mainMixerNode, format: format)
+        }
     }
 
     func start(
@@ -67,6 +73,9 @@ private final class ClickEngine: @unchecked Sendable {
         onBeat: @escaping (Int, Bool) -> Void
     ) {
         stop()
+        guard format != nil else { return }
+
+        lock.lock()
         self.bpm = Tempo.clamped(bpm)
         self.beatsPerMeasure = max(1, beatsPerMeasure)
         self.clicksPerBeat = max(1, clicksPerBeat)
@@ -74,6 +83,7 @@ private final class ClickEngine: @unchecked Sendable {
         self.onBeat = onBeat
         self.beat = 1
         self.clickIndex = 0
+        lock.unlock()
 
         do {
             let session = AVAudioSession.sharedInstance()
@@ -83,24 +93,32 @@ private final class ClickEngine: @unchecked Sendable {
                 try audioEngine.start()
             }
             node.play()
+            lock.lock()
             isRunning = true
+            lock.unlock()
             scheduleLoop()
         } catch {
+            lock.lock()
             isRunning = false
+            lock.unlock()
         }
     }
 
     func update(bpm: Int, beatsPerMeasure: Int, clicksPerBeat: Int, sound: ClickSound) {
+        lock.lock()
         self.bpm = Tempo.clamped(bpm)
         self.beatsPerMeasure = max(1, beatsPerMeasure)
         self.clicksPerBeat = max(1, clicksPerBeat)
         self.sound = sound
+        lock.unlock()
     }
 
     func stop() {
         schedulerTask?.cancel()
         schedulerTask = nil
+        lock.lock()
         isRunning = false
+        lock.unlock()
         node.stop()
         if audioEngine.isRunning {
             audioEngine.pause()
@@ -109,32 +127,72 @@ private final class ClickEngine: @unchecked Sendable {
 
     private func scheduleLoop() {
         schedulerTask = Task.detached { [weak self] in
-            while let self, self.isRunning, !Task.isCancelled {
-                let isAccent = self.clickIndex == 0 && self.beat == 1
-                let isBeat = self.clickIndex == 0
-                if self.sound != .mute {
-                    self.playClick(isAccent: isAccent)
+            while let self, !Task.isCancelled {
+                let snapshot = self.snapshotForTick()
+                guard snapshot.isRunning else { break }
+
+                if snapshot.sound != .mute {
+                    self.playClick(sound: snapshot.sound, isAccent: snapshot.isAccent)
                 }
-                if isBeat {
-                    self.onBeat?(self.beat, isAccent)
+                if snapshot.isBeat {
+                    snapshot.onBeat?(snapshot.beat, snapshot.isAccent)
                 }
 
-                self.clickIndex += 1
-                if self.clickIndex >= self.clicksPerBeat {
-                    self.clickIndex = 0
-                    self.beat += 1
-                    if self.beat > self.beatsPerMeasure {
-                        self.beat = 1
-                    }
-                }
+                self.advanceCounters(
+                    clicksPerBeat: snapshot.clicksPerBeat,
+                    beatsPerMeasure: snapshot.beatsPerMeasure
+                )
 
-                let nanos = UInt64((60.0 / Double(self.bpm) / Double(self.clicksPerBeat)) * 1_000_000_000)
+                let nanos = UInt64((60.0 / Double(snapshot.bpm) / Double(snapshot.clicksPerBeat)) * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: nanos)
             }
         }
     }
 
-    private func playClick(isAccent: Bool) {
+    private struct TickSnapshot {
+        let isRunning: Bool
+        let bpm: Int
+        let beatsPerMeasure: Int
+        let clicksPerBeat: Int
+        let sound: ClickSound
+        let beat: Int
+        let isBeat: Bool
+        let isAccent: Bool
+        let onBeat: ((Int, Bool) -> Void)?
+    }
+
+    private func snapshotForTick() -> TickSnapshot {
+        lock.lock()
+        defer { lock.unlock() }
+        let isBeat = clickIndex == 0
+        let isAccent = isBeat && beat == 1
+        return TickSnapshot(
+            isRunning: isRunning,
+            bpm: bpm,
+            beatsPerMeasure: beatsPerMeasure,
+            clicksPerBeat: clicksPerBeat,
+            sound: sound,
+            beat: beat,
+            isBeat: isBeat,
+            isAccent: isAccent,
+            onBeat: onBeat
+        )
+    }
+
+    private func advanceCounters(clicksPerBeat: Int, beatsPerMeasure: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        clickIndex += 1
+        if clickIndex >= clicksPerBeat {
+            clickIndex = 0
+            beat += 1
+            if beat > beatsPerMeasure {
+                beat = 1
+            }
+        }
+    }
+
+    private func playClick(sound: ClickSound, isAccent: Bool) {
         guard let buffer = Self.makeBuffer(sound: sound, isAccent: isAccent) else { return }
         node.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
     }
@@ -143,7 +201,7 @@ private final class ClickEngine: @unchecked Sendable {
         let sampleRate = 44_100.0
         let duration = isAccent ? 0.04 : 0.03
         let frameCount = AVAudioFrameCount(sampleRate * duration)
-        let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { return nil }
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return nil }
         buffer.frameLength = frameCount
         guard let channel = buffer.floatChannelData?[0] else { return nil }
@@ -167,25 +225,5 @@ private final class ClickEngine: @unchecked Sendable {
             channel[index] = Float(sin(2 * Double.pi * frequency * time)) * amplitude * envelope
         }
         return buffer
-    }
-}
-
-// MARK: - HapticPlayer
-// UIImpactFeedbackGenerator. Gated by AppSettingsStore.hapticsEnabled in the ModelViews.
-
-final class HapticPlayer: HapticPlaying {
-    private let light = UIImpactFeedbackGenerator(style: .light)
-    private let medium = UIImpactFeedbackGenerator(style: .medium)
-
-    func playInTune() {
-        medium.impactOccurred()
-    }
-
-    func playClick(isAccent: Bool) {
-        if isAccent {
-            medium.impactOccurred(intensity: 1)
-        } else {
-            light.impactOccurred(intensity: 0.7)
-        }
     }
 }

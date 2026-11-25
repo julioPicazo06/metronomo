@@ -35,7 +35,7 @@ struct TunerReadoutView: View {
     }
 
     // MARK: Status line
-    // idle muted, listening magenta, inTune lime, sharp/flat orange.
+    // idle muted, inTune lime, sharp/flat orange.
 
     private var statusLine: some View {
         HStack(spacing: 8) {
@@ -43,10 +43,6 @@ struct TunerReadoutView: View {
             case .idle:
                 Text(TunerCopy.Status.idle)
                     .foregroundStyle(AppTheme.textMuted)
-            case .listening:
-                Circle().fill(AppTheme.accent).frame(width: 8, height: 8)
-                Text(TunerCopy.Status.listening)
-                    .foregroundStyle(AppTheme.accent)
             case .inTune:
                 Image(systemName: "checkmark")
                 Text(TunerCopy.Status.inTune)
@@ -72,7 +68,6 @@ struct TunerReadoutView: View {
         switch modelView.status {
         case .inTune: AppTheme.success
         case .sharp, .flat: AppTheme.warning
-        case .listening: AppTheme.accent
         default: AppTheme.textMuted
         }
     }

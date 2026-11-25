@@ -1,6 +1,5 @@
 import AVFoundation
 import Foundation
-import UIKit
 
 // MARK: - PitchDetector
 // Main-actor façade. PitchEngine (@unchecked Sendable) owns AVAudioEngine + input tap.
@@ -82,35 +81,5 @@ private final class PitchEngine: @unchecked Sendable {
         if let frequency = PitchEstimator.frequency(samples: samples, sampleRate: sampleRate) {
             onFrequency?(frequency)
         }
-    }
-}
-
-// MARK: - MicrophonePermission / SystemOpener
-// iOS 17+ AVAudioApplication.recordPermission. SystemOpener opens the Settings app.
-
-final class MicrophonePermission: MicrophonePermitting {
-    func currentStatus() -> MicrophoneStatus {
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted:
-            return .granted
-        case .denied:
-            return .denied
-        case .undetermined:
-            return .undetermined
-        @unknown default:
-            return .denied
-        }
-    }
-
-    func requestAccess() async -> MicrophoneStatus {
-        let granted = await AVAudioApplication.requestRecordPermission()
-        return granted ? .granted : .denied
-    }
-}
-
-final class SystemOpener: SystemOpening {
-    func openAppSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
     }
 }

@@ -6,7 +6,6 @@ import Foundation
 
 enum TunerStatus: Equatable, Sendable {
     case idle
-    case listening
     case inTune
     case sharp
     case flat
@@ -40,8 +39,7 @@ enum TuningAnalyzer {
         mode: TunerMode,
         strings: [Note],
         lockedStringIndex: Int?,
-        a4: Double,
-        threshold: Double
+        a4: Double
     ) -> TuningReading {
         switch mode {
         case .chromatic:

@@ -7,6 +7,14 @@ import Observation
 
 @Observable
 final class MetronomeModelView {
+    /// Gap longer than this clears the tap buffer and starts a new estimate.
+    static let tapGapResetInterval: TimeInterval = 2
+    /// How long the tap indicator stays lit after the last tap.
+    static let tapIndicatorClearInterval: TimeInterval = 1.2
+    static var tapIndicatorClearNanoseconds: UInt64 {
+        UInt64(tapIndicatorClearInterval * 1_000_000_000)
+    }
+
     private let player: ClickPlaying
     private let haptics: HapticPlaying
     private let settings: AppSettingsStore
@@ -17,7 +25,11 @@ final class MetronomeModelView {
     var isPlaying = false
     var isTapping = false
     var currentBeat = 1
-    var showsSoundSheet = false
+    var sheets = Sheets()
+
+    struct Sheets {
+        var sound = false
+    }
 
     private var tapDates: [Date] = []
 
@@ -71,13 +83,12 @@ final class MetronomeModelView {
 
     func selectSound(_ sound: ClickSound) {
         settings.metronomeSound = sound
-        showsSoundSheet = false
+        sheets.sound = false
         persistAndRefresh()
     }
 
-    func tap() {
-        let now = Date()
-        if let last = tapDates.last, now.timeIntervalSince(last) > 2 {
+    func tap(now: Date = Date()) {
+        if let last = tapDates.last, now.timeIntervalSince(last) > Self.tapGapResetInterval {
             tapDates.removeAll()
         }
         tapDates.append(now)
@@ -90,8 +101,8 @@ final class MetronomeModelView {
             }
         }
         Task {
-            try? await Task.sleep(nanoseconds: 1_200_000_000)
-            if let last = tapDates.last, Date().timeIntervalSince(last) >= 1.1 {
+            try? await Task.sleep(nanoseconds: Self.tapIndicatorClearNanoseconds)
+            if let last = tapDates.last, Date().timeIntervalSince(last) >= Self.tapIndicatorClearInterval {
                 isTapping = false
             }
         }

@@ -31,6 +31,8 @@ struct NoteTests {
 
     @Test func guitarStandardHasSixStrings() {
         #expect(TuningPreset.guitar[0].strings.count == 6)
+        #expect(TuningPreset.bass4[0].strings.count == 4)
+        #expect(TuningPreset.bass5[0].strings.count == 5)
         #expect(TuningPreset.violin[0].strings.count == 4)
         #expect(TuningPreset.ukulele[0].strings.count == 4)
     }
@@ -43,8 +45,7 @@ struct TuningAnalyzerTests {
             mode: .chromatic,
             strings: InstrumentKind.guitar.defaultPreset.strings,
             lockedStringIndex: nil,
-            a4: 440,
-            threshold: 5
+            a4: 440
         )
         #expect(reading.note.pitchClass == .a)
         #expect(reading.note.octave == 4)
@@ -60,8 +61,7 @@ struct TuningAnalyzerTests {
             mode: .strings,
             strings: strings,
             lockedStringIndex: nil,
-            a4: 440,
-            threshold: 5
+            a4: 440
         )
         #expect(reading.stringIndex == 0)
         #expect(reading.note.pitchClass == .e)
@@ -74,10 +74,68 @@ struct TuningAnalyzerTests {
             mode: .chromatic,
             strings: [],
             lockedStringIndex: nil,
-            a4: 440,
-            threshold: 5
+            a4: 440
         )
         #expect(reading.cents > 5)
         #expect(reading.status(threshold: 5) == .sharp)
+    }
+
+    @Test func flatFrequencyIsReported() {
+        let reading = TuningAnalyzer.reading(
+            frequency: 435,
+            mode: .chromatic,
+            strings: [],
+            lockedStringIndex: nil,
+            a4: 440
+        )
+        #expect(reading.cents < -5)
+        #expect(reading.status(threshold: 5) == .flat)
+    }
+
+    @Test func lockedStringIgnoresCloserNeighbor() {
+        let strings = InstrumentKind.guitar.defaultPreset.strings
+        // A2 (~110 Hz) is closer to string 1, but lock forces string 0 (E2).
+        let a2 = strings[1].frequency(a4: 440)
+        let reading = TuningAnalyzer.reading(
+            frequency: a2,
+            mode: .strings,
+            strings: strings,
+            lockedStringIndex: 0,
+            a4: 440
+        )
+        #expect(reading.stringIndex == 0)
+        #expect(reading.note.pitchClass == .e)
+        #expect(reading.note.octave == 2)
+    }
+
+    @Test func statusRespectsThresholdBoundary() {
+        let reading = TuningAnalyzer.reading(
+            frequency: 440 * pow(2.0, 6.0 / 1200.0),
+            mode: .chromatic,
+            strings: [],
+            lockedStringIndex: nil,
+            a4: 440
+        )
+        #expect(abs(reading.cents - 6) < 0.1)
+        #expect(reading.status(threshold: 5) == .sharp)
+        #expect(reading.status(threshold: 10) == .inTune)
+    }
+}
+
+struct InstrumentKindPersistenceTests {
+    @Test func mapsLegacyBassToBass4() {
+        #expect(InstrumentKind.persisted(from: "bass") == .bass4)
+    }
+
+    @Test func mapsCurrentRawValues() {
+        #expect(InstrumentKind.persisted(from: "guitar") == .guitar)
+        #expect(InstrumentKind.persisted(from: "bass4") == .bass4)
+        #expect(InstrumentKind.persisted(from: "bass5") == .bass5)
+        #expect(InstrumentKind.persisted(from: "violin") == .violin)
+        #expect(InstrumentKind.persisted(from: "ukulele") == .ukulele)
+    }
+
+    @Test func rejectsUnknownRawValue() {
+        #expect(InstrumentKind.persisted(from: "banjo") == nil)
     }
 }

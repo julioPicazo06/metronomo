@@ -1,7 +1,7 @@
 import SwiftUI
 
 // MARK: - TuningPresetSheet (View)
-// Standard / Drop D / Open G / Open D, ukulele C D Baritone.
+// Guitar / bass / violin / ukulele presets for the current instrument.
 // Debug: selectPreset replaces preset.strings — chips and restNote update at once.
 
 struct TuningPresetSheet: View {
@@ -15,7 +15,7 @@ struct TuningPresetSheet: View {
                     .foregroundStyle(.white)
                 Spacer()
                 Button {
-                    modelView.showsTuningSheet = false
+                    modelView.sheets.tuning = false
                 } label: {
                     Image(systemName: "xmark")
                         .foregroundStyle(AppTheme.textMuted)

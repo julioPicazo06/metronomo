@@ -16,12 +16,12 @@ final class AppSettingsStore {
 
     var a4Frequency: Double {
         get { settings.a4Frequency }
-        set { settings.a4Frequency = newValue }
+        set { settings.a4Frequency = AppSettings.sanitizedA4(newValue) }
     }
 
     var inTuneThreshold: Double {
         get { settings.inTuneThreshold }
-        set { settings.inTuneThreshold = newValue }
+        set { settings.inTuneThreshold = AppSettings.sanitizedThreshold(newValue) }
     }
 
     var defaultInstrument: InstrumentKind {
@@ -54,11 +54,6 @@ final class AppSettingsStore {
         set { settings.lastBPM = Tempo.clamped(newValue) }
     }
 
-    var lastInstrument: InstrumentKind {
-        get { settings.lastInstrument }
-        set { settings.lastInstrument = newValue }
-    }
-
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.settings = AppSettingsStore.load(from: defaults, prefix: "afinador.settings.")
@@ -73,19 +68,22 @@ final class AppSettingsStore {
         defaults.set(settings.metronomeSound.rawValue, forKey: prefix + "sound")
         defaults.set(settings.lastTabIndex, forKey: prefix + "tab")
         defaults.set(settings.lastBPM, forKey: prefix + "bpm")
-        defaults.set(settings.lastInstrument.rawValue, forKey: prefix + "instrument")
     }
 
     private static func load(from defaults: UserDefaults, prefix: String) -> AppSettings {
         var loaded = AppSettings.default
         if defaults.object(forKey: prefix + "a4") != nil {
-            loaded.a4Frequency = defaults.double(forKey: prefix + "a4")
+            loaded.a4Frequency = AppSettings.sanitizedA4(defaults.double(forKey: prefix + "a4"))
         }
         if defaults.object(forKey: prefix + "threshold") != nil {
-            loaded.inTuneThreshold = defaults.double(forKey: prefix + "threshold")
+            loaded.inTuneThreshold = AppSettings.sanitizedThreshold(defaults.double(forKey: prefix + "threshold"))
         }
         if let raw = defaults.string(forKey: prefix + "defaultInstrument"),
-           let kind = InstrumentKind(rawValue: raw) {
+           let kind = InstrumentKind.persisted(from: raw) {
+            loaded.defaultInstrument = kind
+        } else if let raw = defaults.string(forKey: prefix + "instrument"),
+                  let kind = InstrumentKind.persisted(from: raw) {
+            // Legacy key from when lastInstrument was separate.
             loaded.defaultInstrument = kind
         }
         if defaults.object(forKey: prefix + "keepAwake") != nil {
@@ -103,10 +101,6 @@ final class AppSettingsStore {
         }
         if defaults.object(forKey: prefix + "bpm") != nil {
             loaded.lastBPM = Tempo.clamped(defaults.integer(forKey: prefix + "bpm"))
-        }
-        if let raw = defaults.string(forKey: prefix + "instrument"),
-           let kind = InstrumentKind(rawValue: raw) {
-            loaded.lastInstrument = kind
         }
         return loaded
     }

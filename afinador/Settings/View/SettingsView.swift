@@ -21,13 +21,13 @@ struct SettingsView: View {
                     .padding(.top, 4)
 
                 settingsButton(SettingsCopy.Row.a4, value: AppCopy.Format.hzInt(modelView.store.a4Frequency)) {
-                    modelView.showsA4Sheet = true
+                    modelView.sheets.a4 = true
                 }
                 settingsButton(SettingsCopy.Row.threshold, value: AppCopy.Format.centsThreshold(modelView.store.inTuneThreshold)) {
-                    modelView.showsThresholdSheet = true
+                    modelView.sheets.threshold = true
                 }
                 settingsButton(SettingsCopy.Row.defaultInstrument, value: modelView.store.defaultInstrument.title, valueColor: AppTheme.emphasis) {
-                    modelView.showsInstrumentSheet = true
+                    modelView.sheets.instrument = true
                 }
 
                 toggleRow(SettingsCopy.Row.keepAwake, isOn: Binding(
@@ -39,7 +39,7 @@ struct SettingsView: View {
                     set: { modelView.store.hapticsEnabled = $0 }
                 ))
                 settingsButton(SettingsCopy.Row.metronomeSound, value: modelView.store.metronomeSound.title, valueColor: AppTheme.emphasis) {
-                    modelView.showsSoundSheet = true
+                    modelView.sheets.sound = true
                 }
 
                 Text(modelView.versionText)
@@ -53,7 +53,7 @@ struct SettingsView: View {
             .padding(.bottom, 24)
         }
         .background(AppTheme.canvas.ignoresSafeArea())
-        .sheet(isPresented: Binding(get: { modelView.showsA4Sheet }, set: { modelView.showsA4Sheet = $0 })) {
+        .sheet(isPresented: Binding(get: { modelView.sheets.a4 }, set: { modelView.sheets.a4 = $0 })) {
             OptionPickerSheet(
                 title: SettingsCopy.Row.a4,
                 options: AppSettings.a4Options.map { (AppCopy.Format.hzInt($0), $0) },
@@ -61,7 +61,7 @@ struct SettingsView: View {
                 onSelect: modelView.selectA4
             )
         }
-        .sheet(isPresented: Binding(get: { modelView.showsThresholdSheet }, set: { modelView.showsThresholdSheet = $0 })) {
+        .sheet(isPresented: Binding(get: { modelView.sheets.threshold }, set: { modelView.sheets.threshold = $0 })) {
             OptionPickerSheet(
                 title: SettingsCopy.Row.thresholdSheet,
                 options: AppSettings.thresholdOptions.map { (AppCopy.Format.centsThreshold($0), $0) },
@@ -69,7 +69,7 @@ struct SettingsView: View {
                 onSelect: modelView.selectThreshold
             )
         }
-        .sheet(isPresented: Binding(get: { modelView.showsInstrumentSheet }, set: { modelView.showsInstrumentSheet = $0 })) {
+        .sheet(isPresented: Binding(get: { modelView.sheets.instrument }, set: { modelView.sheets.instrument = $0 })) {
             OptionPickerSheet(
                 title: SettingsCopy.Row.instrumentSheet,
                 options: InstrumentKind.allCases.map { ($0.title, $0) },
@@ -77,11 +77,13 @@ struct SettingsView: View {
                 onSelect: modelView.selectInstrument
             )
         }
-        .sheet(isPresented: Binding(get: { modelView.showsSoundSheet }, set: { modelView.showsSoundSheet = $0 })) {
-            SoundPickerSheet(selected: modelView.store.metronomeSound) { sound in
-                modelView.selectSound(sound)
-            }
-            .presentationDetents([.medium])
+        .sheet(isPresented: Binding(get: { modelView.sheets.sound }, set: { modelView.sheets.sound = $0 })) {
+            OptionPickerSheet(
+                title: MetronomeCopy.Screen.soundSheetTitle,
+                options: ClickSound.allCases.map { ($0.title, $0) },
+                selected: modelView.store.metronomeSound,
+                onSelect: modelView.selectSound
+            )
         }
     }
 
